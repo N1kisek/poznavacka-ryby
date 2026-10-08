@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Poznávačka ryb</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one column; sticky tab bar; quiz/cards = one big specimen, atlas = grid of labelled cards */
+:root{
+  --bg:#000000; --surface:#111111; --ink:#f2f2f2; --muted:#8c8c8c;
+  --accent:#ffffff; --accent-ink:#000000; --tag:#2a2a2a; --line:#262626;
+  --ok:#4ade80; --ok-bg:#0f2a19; --bad:#f87171; --bad-bg:#2c1212; --warn:#fbbf24; --warn-bg:#2b220c;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --gutter:16px; --radius:18px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 var(--body);
+  padding-inline:max(var(--gutter), env(safe-area-inset-left,0px)) max(var(--gutter), env(safe-area-inset-right,0px));
+  padding-block:0 calc(24px + env(safe-area-inset-bottom,0px));
+  -webkit-tap-highlight-color:transparent}
+button,input,[role="button"]{touch-action:manipulation}
+img{max-width:100%}
+.wrap{max-width:980px;margin:0 auto}
+header{padding-block:calc(24px + env(safe-area-inset-top,0px)) 12px}
+h1{font:800 clamp(30px,6vw,46px)/1 var(--display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 small{display:block;font:600 12px/1.4 var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;gap:6px;padding-block:10px;background:var(--bg)}
+.tab{flex:1 1 0;max-width:200px;min-width:0;border:2px solid var(--line);background:var(--surface);color:var(--ink);font:700 16px var(--body);padding:10px 12px;border-radius:999px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* shared */
+.quizbar{display:flex;flex-wrap:wrap;gap:4px 18px;align-items:center;justify-content:space-between;margin:8px 0 10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.quizbar b{color:var(--ink)}
+.progress{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin-bottom:14px}
+.progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:grid;gap:14px}
+/* image box: picture always fully visible, never cropped */
+.specimen{position:relative;background:#fff;border-radius:12px;aspect-ratio:1199/480;width:100%;max-width:100%;overflow:hidden}
+.specimen img,.specimen .missing{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:4px}
+.missing{display:grid;place-content:center;color:#5b726d;text-align:center;font-size:14px}
+.missing a{color:#0e7c6b}
+.btn{font:700 16px var(--body);padding:12px 16px;min-height:48px;border-radius:12px;border:2px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.good{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.btn.bad{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.btn:disabled{opacity:.4;cursor:default}
+.tools{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.tools .btn{font-size:14px;padding:8px 14px;min-height:40px}
+.done{text-align:center;padding:28px 18px}
+.done h2{font:800 34px/1.1 var(--display);margin:0 0 6px}
+.done p{color:var(--muted);margin:0 0 18px}
+.done .nav{display:flex;flex-wrap:wrap;justify-content:center}
+.done .nav .btn{flex:1 1 200px}
+
+/* QUIZ */
+.answer{display:flex;gap:8px;flex-wrap:wrap}
+.answer input{flex:1 1 240px;min-width:0;font:700 20px var(--body);padding:12px 14px;min-height:52px;border:2px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink)}
+.answer input:disabled{opacity:.85}
+.answer .btn{flex:0 0 auto}
+.nav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.feedback{border-radius:12px;padding:12px 14px;font-weight:700}
+.feedback.ok{background:var(--ok-bg);color:var(--ok)}
+.feedback.bad{background:var(--bad-bg);color:var(--bad)}
+.feedback.warn{background:var(--warn-bg);color:var(--warn)}
+.feedback .correct{display:block;font:800 24px/1.2 var(--display);margin-top:2px;color:var(--ink)}
+
+/* FLASHCARDS */
+.fc-nav{display:grid;grid-template-columns:1fr 1.4fr 1.4fr 1fr;grid-template-areas:"prev no yes next";gap:8px;margin-top:14px}
+#fc-prev{grid-area:prev} #fc-no{grid-area:no} #fc-yes{grid-area:yes} #fc-next{grid-area:next}
+.flip{perspective:1400px;cursor:pointer;outline:none;border-radius:var(--radius);user-select:none;-webkit-user-select:none}
+.flip:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.flip-inner{position:relative;display:grid;transition:transform .45s cubic-bezier(.3,.7,.3,1);transform-style:preserve-3d}
+.flip.flipped .flip-inner{transform:rotateY(180deg)}
+.face{grid-area:1/1;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:grid;gap:12px;align-content:center;justify-items:center;min-height:min(420px,60vh)}
+.face.back{transform:rotateY(180deg)}
+.face .specimen.small{max-width:420px}
+.flip-hint{color:var(--muted);font-size:14px;text-align:center}
+.fc-name{font:800 clamp(28px,6vw,44px)/1.1 var(--display);text-align:center;text-wrap:balance}
+.flip.reverse .front .specimen{display:none}
+.front .fc-name{display:none}
+.flip.reverse .front .fc-name{display:block}
+.toggle{display:flex;gap:8px;align-items:center;color:var(--muted);font-size:14px;cursor:pointer;min-height:40px}
+.toggle input{width:18px;height:18px}
+
+/* ATLAS */
+.atlas-bar{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 10px}
+.filter{flex:1 1 240px;min-width:0;font:16px var(--body);padding:12px 14px;min-height:50px;border:2px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}
+.seg{display:flex;flex:1 1 280px;max-width:100%;background:var(--surface);border:2px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;border:0;background:transparent;color:var(--muted);font:700 15px var(--body);padding:8px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.atlas-tools{display:flex;justify-content:space-between;align-items:center;gap:4px 10px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;margin-top:12px}
+.fish{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px;display:grid;gap:8px;align-content:start;cursor:pointer;text-align:left;font:inherit;color:inherit;transition:border-color .15s, transform .15s}
+@media (hover:hover){.fish:hover{border-color:var(--muted);transform:translateY(-2px)}}
+.fish .name{justify-self:start;background:var(--tag);color:var(--ink);font:700 14px/1.25 var(--body);padding:4px 10px;border-radius:6px;text-transform:uppercase;letter-spacing:.03em}
+.grid.hide-names .name{filter:blur(7px)}
+.grid.hide-names .fish.peek .name{filter:none}
+
+/* LIGHTBOX: image on top, controls in their own row below, never overlapping */
+.lightbox{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;
+  padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.lb-box{position:relative;width:min(1100px,100%);max-height:100%;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:56px 20px 16px;display:flex;flex-direction:column;gap:14px;animation:lbIn .18s ease-out}
+@keyframes lbIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+.lb-img{flex:1 1 auto;min-height:0;background:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center;padding:12px;overflow:hidden}
+.lb-img img{display:block;width:auto;height:auto;max-width:100%;max-height:calc(100dvh - 260px);object-fit:contain}
+.lb-row{flex:0 0 auto;display:flex;align-items:center;gap:12px}
+.lb-row .btn{flex:0 0 auto;font-size:20px;padding:8px 18px}
+.lb-name{flex:1;min-width:0;text-align:center;font:800 clamp(22px,4.5vw,38px)/1.1 var(--display);text-wrap:balance}
+.lb-side{flex:0 0 auto;display:flex;flex-direction:column;gap:6px}
+.lb-count{text-align:center;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.lb-close{position:absolute;top:10px;right:12px;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--tag);color:var(--ink);font-size:18px;cursor:pointer}
+
+.sig{text-align:center;color:var(--muted);font:700 11px/1 var(--body);letter-spacing:.3em;padding-block:40px 8px;opacity:.6}
+
+/* PHONES */
+@media (max-width:560px){
+  :root{--radius:16px}
+  header{padding-block:calc(16px + env(safe-area-inset-top,0px)) 6px}
+  .tab{max-width:none;font-size:15px;padding:9px 6px}
+  .card,.face{padding:12px}
+  .answer input{flex-basis:100%;font-size:18px}
+  .answer .btn{flex:1 1 100%}
+  .nav{grid-template-columns:1fr 1fr;grid-template-areas:"idk idk" "prev next"}
+  #btn-idk{grid-area:idk} #btn-prev{grid-area:prev} #btn-next{grid-area:next}
+  .fc-nav{grid-template-columns:1fr 1fr;grid-template-areas:"no yes" "prev next"}
+  .face{min-height:min(340px,55vh)}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .fish{padding:8px;gap:6px}
+  .fish .name{font-size:12px;padding:3px 7px}
+  .seg button{font-size:14px;padding:8px 6px}
+  .lightbox{padding-inline:8px}
+  .lb-box{padding:52px 12px 12px;border-radius:16px}
+  .lb-img{padding:6px}
+  .lb-row .btn{padding:8px 14px}
+  .feedback .correct{font-size:21px}
+}
+/* very small phones */
+@media (max-width:360px){
+  .grid{grid-template-columns:1fr}
+}
+/* phones held sideways / short screens */
+@media (max-height:520px) and (orientation:landscape){
+  header{padding-block:10px 4px}
+  h1{font-size:26px}
+  h1 small{display:none}
+  #quiz .specimen,.face .specimen{aspect-ratio:auto;height:46vh}
+  .face{min-height:0}
+  .lb-box{padding:12px;flex-direction:row;align-items:stretch}
+  .lb-img img{max-height:calc(100dvh - 70px)}
+  .lb-side{flex:0 0 200px;flex-direction:column;justify-content:center;padding-top:40px}
+  .lb-side .lb-row{flex-wrap:wrap;justify-content:center}
+  .lb-side .lb-name{flex-basis:100%;order:-1;font-size:24px}
+}
+/* big screens */
+@media (min-width:1400px){
+  .wrap{max-width:1180px}
+  #quiz,#cards{max-width:980px;margin-inline:auto}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><small>36 druhů · zítra poznávačka</small>Poznávačka ryb</h1>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" id="tab-quiz" role="tab" aria-selected="true">Kvíz</button>
+    <button class="tab" id="tab-cards" role="tab" aria-selected="false">Kartičky</button>
+    <button class="tab" id="tab-atlas" role="tab" aria-selected="false">Atlas</button>
+  </nav>
+
+  <section id="quiz">
+    <div class="quizbar">
+      <span>Ryba <b id="pos">1</b> / <b id="total">36</b></span>
+      <span>Správně <b id="score-ok">0</b> · Špatně <b id="score-bad">0</b> · Nevím <b id="score-skip">0</b></span>
+    </div>
+    <div class="progress"><i id="bar"></i></div>
+
+    <div class="card" id="qcard">
+      <div class="specimen" id="qimg"></div>
+      <form class="answer" id="qform" autocomplete="off">
+        <input id="qinput" type="text" placeholder="Napiš celý název, např. Kapr obecný" aria-label="Název ryby" spellcheck="false" autocapitalize="sentences">
+        <button class="btn primary" id="btn-confirm" type="submit">Potvrdit</button>
+      </form>
+      <div class="feedback" id="qfeedback" hidden></div>
+      <div class="nav">
+        <button class="btn" id="btn-prev" type="button">← Předchozí</button>
+        <button class="btn" id="btn-idk" type="button">Nevím</button>
+        <button class="btn" id="btn-next" type="button">Další →</button>
+      </div>
+    </div>
+
+    <div class="card done" id="qdone" hidden>
+      <h2 id="done-title">Hotovo!</h2>
+      <p id="done-text"></p>
+      <div class="nav">
+        <button class="btn primary" id="btn-wrong" type="button">Zopakovat chybné</button>
+        <button class="btn" id="btn-restart2" type="button">Nové kolo (zamíchat)</button>
+      </div>
+    </div>
+
+    <div class="tools">
+      <button class="btn" id="btn-restart" type="button">Zamíchat a začít znovu</button>
+    </div>
+  </section>
+
+  <section id="cards" hidden>
+    <div class="quizbar">
+      <span>Zbývá v balíčku <b id="fc-left">36</b></span>
+      <span>Umím <b id="fc-known">0</b> / <b id="fc-total">36</b></span>
+    </div>
+    <div class="progress"><i id="fc-bar"></i></div>
+
+    <div id="fc-play">
+      <div class="flip" id="fc-card" tabindex="0" role="button" aria-label="Otočit kartičku">
+        <div class="flip-inner">
+          <div class="face front">
+            <div class="specimen" id="fc-img"></div>
+            <span class="flip-hint">Klikni nebo zmáčkni mezerník pro otočení</span>
+          </div>
+          <div class="face back">
+            <div class="specimen small" id="fc-img2"></div>
+            <span class="fc-name" id="fc-name"></span>
+          </div>
+        </div>
+      </div>
+      <div class="fc-nav">
+        <button class="btn" id="fc-prev" type="button">← Předchozí</button>
+        <button class="btn bad" id="fc-no" type="button">Ještě ne</button>
+        <button class="btn good" id="fc-yes" type="button">Umím ✓</button>
+        <button class="btn" id="fc-next" type="button">Další →</button>
+      </div>
+    </div>
+
+    <div class="card done" id="fc-done" hidden>
+      <h2>Celý balíček umíš!</h2>
+      <p>Všech 36 ryb jsi označil jako „Umím“.</p>
+      <div class="nav"><button class="btn primary" id="fc-again" type="button">Projet znovu</button></div>
+    </div>
+
+    <div class="tools">
+      <button class="btn" id="fc-restart" type="button">Zamíchat a začít znovu</button>
+      <label class="toggle"><input type="checkbox" id="fc-reverse"> Obráceně (jméno → obrázek)</label>
+    </div>
+  </section>
+
+  <section id="atlas" hidden>
+    <div class="atlas-bar">
+      <input class="filter" id="filter" type="search" placeholder="Hledat rybu…" aria-label="Hledat rybu">
+      <div class="seg" role="group" aria-label="Jména ryb">
+        <button type="button" id="names-show" aria-pressed="true">Ukázat jména</button>
+        <button type="button" id="names-hide" aria-pressed="false">Schovat jména</button>
+      </div>
+    </div>
+    <div class="atlas-tools">
+      <span id="atlas-count"></span>
+      <span id="atlas-mode">Klikni na rybu pro zvětšení</span>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <div class="lightbox" id="lb" hidden role="dialog" aria-modal="true" aria-label="Detail ryby">
+    <div class="lb-box">
+      <button class="lb-close" id="lb-close" type="button" aria-label="Zavřít">✕</button>
+      <div class="lb-img" id="lb-img"></div>
+      <div class="lb-side">
+      <div class="lb-row">
+        <button class="btn" id="lb-prev" type="button" aria-label="Předchozí ryba">←</button>
+        <span class="lb-name" id="lb-name"></span>
+        <button class="btn" id="lb-next" type="button" aria-label="Další ryba">→</button>
+      </div>
+      <span class="lb-count" id="lb-count"></span>
+      </div>
+    </div>
+  </div>
+
+<footer class="sig">NKSK</footer>
+</div>
+<script src="fish.js"></script>
+<script>
+(function(){
+  const FISH = window.FISH;
+  const REMOTE = h => "https://irybarstvi.cz/uploads/fish/" + h + ".webp";
+  const $ = id => document.getElementById(id);
+
+  // Image: local folder ryby/ first, then the website, then a placeholder
+  function fishImg(f){
+    const img = new Image();
+    img.alt = "";
+    img.loading = "lazy";
+    let stage = 0;
+    img.src = "ryby/" + f.slug + ".webp";
+    img.onerror = () => {
+      stage++;
+      if (stage === 1) { img.src = REMOTE(f.img); return; }
+      const box = document.createElement("div");
+      box.className = "missing";
+      box.innerHTML = 'Obrázek se nenačetl.<br><a href="https://irybarstvi.cz/atlas-ryb/' + f.slug + '" target="_blank" rel="noopener">Otevřít v atlasu</a>';
+      img.replaceWith(box);
+    };
+    return img;
+  }
+
+  // Matching
+  const strip = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const norm = s => s.toLowerCase().replace(/\s+/g, " ").trim();
+  function check(f, input){
+    const a = norm(input);
+    if (!a) return null;
+    const names = [f.name].concat(f.alt || []);
+    if (names.some(n => norm(n) === a)) return "ok";
+    if (names.some(n => strip(norm(n)) === strip(a))) return "warn";
+    return "bad";
+  }
+
+  // Quiz state
+  let order = [], idx = 0, answers = [];
+  function shuffle(arr){ const a = arr.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function start(list){
+    order = shuffle(list); idx = 0;
+    answers = order.map(() => null);
+    $("qdone").hidden = true; $("qcard").hidden = false;
+    render();
+  }
+
+  function render(){
+    const f = order[idx], st = answers[idx];
+    $("total").textContent = order.length;
+    $("pos").textContent = idx + 1;
+    const counts = { ok: 0, bad: 0, skip: 0 };
+    answers.forEach(a => { if (!a) return; if (a.result === "ok" || a.result === "warn") counts.ok++; else if (a.result === "bad") counts.bad++; else counts.skip++; });
+    $("score-ok").textContent = counts.ok; $("score-bad").textContent = counts.bad; $("score-skip").textContent = counts.skip;
+    $("bar").style.width = (answers.filter(Boolean).length / order.length * 100) + "%";
+
+    const box = $("qimg"); box.innerHTML = ""; box.appendChild(fishImg(f));
+    const input = $("qinput"), fb = $("qfeedback");
+    input.value = st ? st.text : "";
+    input.disabled = !!st; $("btn-confirm").disabled = !!st; $("btn-idk").disabled = !!st;
+    $("btn-prev").disabled = idx === 0;
+    $("btn-next").textContent = idx === order.length - 1 ? "Vyhodnotit →" : "Další →";
+
+    if (!st){ fb.hidden = true; fb.className = "feedback"; input.focus({ preventScroll: true }); return; }
+    fb.hidden = false;
+    const name = '<span class="correct">' + f.name + "</span>";
+    if (st.result === "ok"){ fb.className = "feedback ok"; fb.innerHTML = "Správně!" + name; }
+    else if (st.result === "warn"){ fb.className = "feedback warn"; fb.innerHTML = "Správně, ale pozor na diakritiku:" + name; }
+    else if (st.result === "bad"){ fb.className = "feedback bad"; fb.innerHTML = "Špatně, je to:" + name; }
+    else { fb.className = "feedback bad"; fb.innerHTML = "Tohle je:" + name; }
+    $("btn-next").focus({ preventScroll: true });
+  }
+
+  $("qform").addEventListener("submit", e => {
+    e.preventDefault();
+    if (answers[idx]) { next(); return; }
+    const text = $("qinput").value;
+    const r = check(order[idx], text);
+    if (!r) { $("qinput").focus(); return; }
+    answers[idx] = { result: r, text };
+    render();
+  });
+  $("btn-idk").addEventListener("click", () => { answers[idx] = { result: "skip", text: "" }; render(); });
+  $("btn-prev").addEventListener("click", () => { if (idx > 0){ idx--; render(); } });
+  $("btn-next").addEventListener("click", next);
+  function next(){
+    if (idx < order.length - 1){ idx++; render(); return; }
+    finish();
+  }
+  function finish(){
+    const ok = answers.filter(a => a && (a.result === "ok" || a.result === "warn")).length;
+    const wrong = order.filter((f, i) => !answers[i] || !(answers[i].result === "ok" || answers[i].result === "warn"));
+    $("qcard").hidden = true; $("qdone").hidden = false;
+    $("done-title").textContent = ok + " / " + order.length;
+    $("done-text").textContent = wrong.length ? "Ještě " + wrong.length + " ryb ti dělá problém. Projeď si je znovu." : "Všechno správně, poznávačka je tvoje!";
+    $("btn-wrong").hidden = !wrong.length;
+    $("btn-wrong").onclick = () => start(wrong);
+  }
+  $("btn-restart").addEventListener("click", () => start(FISH));
+  $("btn-restart2").addEventListener("click", () => start(FISH));
+  document.addEventListener("keydown", e => {
+    if (e.key === "Enter" && answers[idx] && !$("quiz").hidden && document.activeElement !== $("btn-prev") && document.activeElement !== $("btn-next")) { e.preventDefault(); next(); }
+  });
+
+  // Atlas
+  const grid = $("grid");
+  FISH.forEach(f => {
+    const el = document.createElement("button");
+    el.type = "button"; el.className = "fish"; el.dataset.q = strip(f.name.toLowerCase());
+    const sp = document.createElement("div"); sp.className = "specimen"; sp.appendChild(fishImg(f));
+    const nm = document.createElement("span"); nm.className = "name"; nm.textContent = f.name;
+    el.append(sp, nm);
+    el.dataset.slug = f.slug;
+    el.addEventListener("click", () => {
+      if (grid.classList.contains("hide-names")) el.classList.toggle("peek");
+      else lbOpen(f.slug);
+    });
+    grid.appendChild(el);
+  });
+  function filterAtlas(){
+    const q = strip($("filter").value.toLowerCase().trim());
+    let n = 0;
+    grid.querySelectorAll(".fish").forEach(el => { const show = !q || el.dataset.q.includes(q); el.hidden = !show; if (show) n++; });
+    $("atlas-count").textContent = n + " ryb";
+  }
+  $("filter").addEventListener("input", filterAtlas);
+  function setHide(hide){
+    grid.classList.toggle("hide-names", hide);
+    grid.querySelectorAll(".peek").forEach(el => el.classList.remove("peek"));
+    $("names-hide").setAttribute("aria-pressed", hide);
+    $("names-show").setAttribute("aria-pressed", !hide);
+    $("atlas-mode").textContent = hide ? "Klikni na rybu pro odkrytí jména" : "Klikni na rybu pro zvětšení";
+  }
+  $("names-show").addEventListener("click", () => setHide(false));
+  $("names-hide").addEventListener("click", () => setHide(true));
+  filterAtlas();
+
+  // Swipe left/right on touch screens
+  function onSwipe(el, left, right){
+    let x0 = null, y0 = null;
+    el.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+    el.addEventListener("touchend", e => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+      x0 = null;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5){ e.preventDefault(); dx < 0 ? left() : right(); }
+    });
+  }
+
+  // Lightbox
+  let lbList = [], lbI = 0, lbReturn = null;
+  function lbRender(){
+    const f = lbList[lbI];
+    const box = $("lb-img"); box.innerHTML = ""; box.appendChild(fishImg(f));
+    $("lb-name").textContent = f.name;
+    $("lb-count").textContent = (lbI + 1) + " / " + lbList.length;
+  }
+  function lbOpen(slug){
+    const visible = [...grid.querySelectorAll(".fish")].filter(el => !el.hidden).map(el => el.dataset.slug);
+    lbList = FISH.filter(f => visible.includes(f.slug));
+    lbI = Math.max(0, lbList.findIndex(f => f.slug === slug));
+    lbReturn = document.activeElement;
+    $("lb").hidden = false; document.body.style.overflow = "hidden";
+    lbRender(); $("lb-close").focus();
+  }
+  function lbClose(){ $("lb").hidden = true; document.body.style.overflow = ""; if (lbReturn) lbReturn.focus({ preventScroll: true }); }
+  function lbStep(d){ lbI = (lbI + d + lbList.length) % lbList.length; lbRender(); }
+  $("lb-close").addEventListener("click", lbClose);
+  $("lb-prev").addEventListener("click", () => lbStep(-1));
+  $("lb-next").addEventListener("click", () => lbStep(1));
+  $("lb").addEventListener("click", e => { if (e.target === $("lb")) lbClose(); });
+  onSwipe($("lb-img"), () => lbStep(1), () => lbStep(-1));
+  document.addEventListener("keydown", e => {
+    if ($("lb").hidden) return;
+    if (e.key === "Escape") lbClose();
+    else if (e.key === "ArrowRight") lbStep(1);
+    else if (e.key === "ArrowLeft") lbStep(-1);
+  });
+
+  // Flashcards
+  let deck = [], di = 0, known = new Set();
+  const fcCard = $("fc-card");
+  function fcStart(){
+    deck = shuffle(FISH); di = 0; known = new Set();
+    $("fc-done").hidden = true; $("fc-play").hidden = false;
+    fcRender();
+  }
+  function fcRender(){
+    $("fc-total").textContent = FISH.length;
+    $("fc-known").textContent = known.size;
+    $("fc-left").textContent = deck.length;
+    $("fc-bar").style.width = (known.size / FISH.length * 100) + "%";
+    if (!deck.length){ $("fc-play").hidden = true; $("fc-done").hidden = false; return; }
+    if (di >= deck.length) di = 0;
+    const f = deck[di];
+    fcCard.classList.remove("flipped");
+    const a = $("fc-img"), b = $("fc-img2");
+    a.innerHTML = ""; b.innerHTML = "";
+    a.appendChild(fishImg(f)); b.appendChild(fishImg(f));
+    // front shows name in reverse mode: reuse a cloned name node
+    let fn = fcCard.querySelector(".front .fc-name");
+    if (!fn){ fn = document.createElement("span"); fn.className = "fc-name"; fcCard.querySelector(".front").prepend(fn); }
+    fn.textContent = f.name;
+    $("fc-name").textContent = f.name;
+    $("fc-prev").disabled = di === 0;
+    $("fc-next").disabled = di >= deck.length - 1;
+  }
+  function fcFlip(){ fcCard.classList.toggle("flipped"); }
+  function fcYes(){ if (!deck.length) return; known.add(deck[di].slug); deck.splice(di, 1); fcRender(); }
+  function fcNo(){
+    if (!deck.length) return;
+    const [f] = deck.splice(di, 1);
+    const pos = Math.min(deck.length, di + 3 + Math.floor(Math.random() * 3));
+    deck.splice(pos, 0, f);
+    fcRender();
+  }
+  fcCard.addEventListener("click", fcFlip);
+  $("fc-yes").addEventListener("click", fcYes);
+  $("fc-no").addEventListener("click", fcNo);
+  $("fc-prev").addEventListener("click", () => { if (di > 0){ di--; fcRender(); } });
+  $("fc-next").addEventListener("click", () => { if (di < deck.length - 1){ di++; fcRender(); } });
+  $("fc-restart").addEventListener("click", fcStart);
+  $("fc-again").addEventListener("click", fcStart);
+  $("fc-reverse").addEventListener("change", e => { fcCard.classList.toggle("reverse", e.target.checked); fcCard.classList.remove("flipped"); });
+  document.addEventListener("keydown", e => {
+    if ($("cards").hidden || e.target.tagName === "INPUT") return;
+    if (e.key === " " || e.key === "Enter"){ e.preventDefault(); fcFlip(); }
+    else if (e.key === "ArrowRight") $("fc-next").click();
+    else if (e.key === "ArrowLeft") $("fc-prev").click();
+    else if (e.key === "1") fcNo();
+    else if (e.key === "2") fcYes();
+  });
+  fcStart();
+  onSwipe(fcCard, () => $("fc-next").click(), () => $("fc-prev").click());
+
+  // Tabs
+  function show(which){
+    ["quiz", "cards", "atlas"].forEach(t => {
+      $(t).hidden = which !== t;
+      $("tab-" + t).setAttribute("aria-selected", which === t);
+    });
+    if (which === "cards") fcCard.focus({ preventScroll: true });
+  }
+  $("tab-quiz").addEventListener("click", () => show("quiz"));
+  $("tab-cards").addEventListener("click", () => show("cards"));
+  $("tab-atlas").addEventListener("click", () => show("atlas"));
+
+  start(FISH);
+})();
+</script>
+</body>
+</html>
